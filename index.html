@@ -175,7 +175,7 @@
             pdfjsLib.getDocument(pdfPath).promise.then(function(pdf) {
                 pdfDoc = pdf;
                 document.getElementById('loadingMessage').style.display = 'none';
-                document.getElementById('message').textContent = 'تم تحميل الملف. أدخل رقم الصفحة لعرض التقرير.';
+                document.getElementById('message').textContent = 'تم تحميل الملف. أدخل رقم الطالب التسلسلي لعرض الشهادة.';
                 document.getElementById('message').style.color = '#1a73e8';
             }).catch(function(error) {
                 document.getElementById('loadingMessage').style.display = 'none';
