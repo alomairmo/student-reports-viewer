@@ -7,6 +7,8 @@
     
     <!-- تضمين مكتبة PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <!-- تضمين مكتبة pdf-lib لاستخراج صفحات PDF -->
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     
     <style>
         body {
@@ -48,6 +50,14 @@
             width: 200px;
             font-size: 16px;
             outline: none;
+            -webkit-appearance: none;
+            -moz-appearance: textfield;
+        }
+        
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
         
         button {
@@ -115,6 +125,44 @@
             padding: 8px 15px;
         }
         
+        /* إضافة تنسيق للنافذة المنبثقة */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+        
+        .modal-text {
+            margin-bottom: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        
+        .modal-button {
+            padding: 10px 30px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
         @media (max-width: 600px) {
             .container {
                 padding: 15px;
@@ -132,6 +180,16 @@
     </style>
 </head>
 <body>
+    <!-- النافذة المنبثقة للتنبيه -->
+    <div id="alertModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-text">
+                قد تظهر الكتابة في صفحة العرض بشكل غير سليم، لكن عند التحميل ستظهر بشكل صحيح
+            </div>
+            <button class="modal-button" id="modalBtn">موافق</button>
+        </div>
+    </div>
+
     <div class="container">
         <h1> شهادات الطلاب</h1>
         
@@ -148,9 +206,7 @@
         </div>
         
         <div class="controls">
-            <button id="zoomIn">تكبير +</button>
-            <button id="zoomOut">تصغير -</button>
-            <button id="printBtn">طباعة</button>
+            <button id="downloadBtn">تحميل الشهادة</button>
         </div>
     </div>
     
@@ -166,6 +222,19 @@
         let scale = 1.5;
         let canvas = document.getElementById('pdfViewer');
         let ctx = canvas.getContext('2d');
+        
+        // عرض النافذة المنبثقة عند تحميل الصفحة
+        window.onload = function() {
+            document.getElementById('alertModal').style.display = 'block';
+            
+            // تحميل ملف PDF في الخلفية
+            loadPDF();
+        };
+        
+        // إغلاق النافذة المنبثقة عند النقر على زر الموافقة
+        document.getElementById('modalBtn').addEventListener('click', function() {
+            document.getElementById('alertModal').style.display = 'none';
+        });
         
         // تحميل ملف PDF
         function loadPDF() {
@@ -206,6 +275,10 @@
                 canvas.width = viewport.width;
                 canvas.style.display = 'block';
                 
+                // ضبط إعدادات النص العربي
+                ctx.direction = 'rtl';
+                ctx.textAlign = 'right';
+                
                 let renderContext = {
                     canvasContext: ctx,
                     viewport: viewport
@@ -222,35 +295,64 @@
             });
         }
         
-        // تغيير حجم العرض
-        function changeZoom(delta) {
-            scale += delta;
-            if (scale < 0.5) scale = 0.5;  // الحد الأدنى للتصغير
-            if (scale > 3) scale = 3;      // الحد الأقصى للتكبير
-            renderPage(pageNum);
-        }
-        
-        // طباعة الصفحة الحالية
-        function printPage() {
+        // تحميل الصفحة الحالية
+        function downloadPage() {
             if (!pdfDoc || pageNum < 1) {
-                document.getElementById('message').textContent = 'لا توجد صفحة للطباعة.';
+                document.getElementById('message').textContent = 'لا توجد شهادة للتحميل.';
                 return;
             }
             
-            // إنشاء عنصر iframe مؤقت للطباعة
-            let printFrame = document.createElement('iframe');
-            printFrame.style.display = 'none';
-            document.body.appendChild(printFrame);
+            document.getElementById('message').textContent = 'جاري تحضير الشهادة للتحميل...';
+            document.getElementById('message').style.color = '#1a73e8';
             
-            let printDocument = printFrame.contentDocument || printFrame.contentWindow.document;
-            printDocument.body.appendChild(canvas.cloneNode(true));
+            // استخدام pdf-lib لاستخراج الصفحة المحددة كملف PDF
+            async function extractPage() {
+                try {
+                    // تحميل ملف PDF
+                    const existingPdfBytes = await fetch(pdfPath).then(res => res.arrayBuffer());
+                    
+                    // تحميل الملف باستخدام pdf-lib
+                    const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+                    
+                    // إنشاء وثيقة PDF جديدة
+                    const newPdf = await PDFLib.PDFDocument.create();
+                    
+                    // نسخ الصفحة المحددة
+                    const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNum - 1]);
+                    newPdf.addPage(copiedPage);
+                    
+                    // حفظ الوثيقة الجديدة كمصفوفة ثنائية
+                    const newPdfBytes = await newPdf.save();
+                    
+                    // إنشاء blob من المصفوفة الثنائية
+                    const blob = new Blob([newPdfBytes], { type: 'application/pdf' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    // إنشاء رابط تنزيل
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `شهادة_طالب_${pageNum}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    document.getElementById('message').textContent = 'تم تحميل الشهادة بنجاح.';
+                    document.getElementById('message').style.color = 'green';
+                    
+                    // إخفاء الرسالة بعد 3 ثواني
+                    setTimeout(function() {
+                        document.getElementById('message').textContent = '';
+                    }, 3000);
+                    
+                } catch (error) {
+                    console.error('Error extracting PDF page:', error);
+                    document.getElementById('message').textContent = 'حدث خطأ أثناء تحميل الشهادة.';
+                    document.getElementById('message').style.color = 'red';
+                }
+            }
             
-            // طباعة المحتوى
-            setTimeout(function() {
-                printFrame.contentWindow.focus();
-                printFrame.contentWindow.print();
-                document.body.removeChild(printFrame);
-            }, 500);
+            extractPage();
         }
         
         // إضافة مستمعي الأحداث
@@ -266,20 +368,9 @@
             }
         });
         
-        document.getElementById('zoomIn').addEventListener('click', function() {
-            changeZoom(0.2);
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            downloadPage();
         });
-        
-        document.getElementById('zoomOut').addEventListener('click', function() {
-            changeZoom(-0.2);
-        });
-        
-        document.getElementById('printBtn').addEventListener('click', function() {
-            printPage();
-        });
-        
-        // تحميل ملف PDF عند تحميل الصفحة
-        window.onload = loadPDF;
     </script>
 </body>
 </html>
